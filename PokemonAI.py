@@ -1,13 +1,37 @@
-﻿import pyautogui
-import cv2
+﻿import cv2
 import numpy as np
 from PIL import ImageGrab
 import pytesseract
 import time
 import logging
+from pynput.keyboard import Controller, Key
 
 # Configure logging
 logging.basicConfig(filename='nuzlocke.log', level=logging.INFO)
+
+# Initialize the keyboard controller
+keyboard_controller = Controller()
+
+# Define the room grid based on the game's grid system
+room_grid = [
+    ["wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall", "wall"],
+    ["wall", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "wall"],
+    ["wall", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "wall"],
+    ["wall", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "wall"],
+    ["wall", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "wall"],
+    ["wall", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "wall"],
+    ["wall", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "wall"],
+    ["wall", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "floor", "wall"],
+]
+
+# Map key positions to coordinates based on the game's grid system
+positions = {
+    "player": (3, 3),  # Starting position of the player (row 3, column 3)
+    "computer": (6, 1),  # Position of the computer (row 6, column 1)
+    "stairs": (7, 9),  # Position of the stairs (row 7, column 9)
+    "tv": (4, 5),  # TV's position (row 4, column 5)
+    "bed": [(2, 3), (2, 4)],  # Bed occupies multiple tiles
+}
 
 def capture_screen(region):
     """
@@ -22,12 +46,24 @@ def capture_screen(region):
 
 def press_button(button):
     """
-    Simulates a button press.
+    Simulates a button press using pynput.
     :param button: The key to press (e.g., 'z', 'x', 'up', 'down').
     """
-    pyautogui.keyDown(button)
-    time.sleep(0.1)  # Short delay to mimic natural key press
-    pyautogui.keyUp(button)
+    key_mapping = {
+        "up": Key.up,
+        "down": Key.down,
+        "left": Key.left,
+        "right": Key.right,
+        "z": "z",
+        "x": "x"
+    }
+
+    if button in key_mapping:
+        key = key_mapping[button]
+        keyboard_controller.press(key)
+        time.sleep(0.2)  # Delay to mimic natural key press
+        keyboard_controller.release(key)
+        time.sleep(0.2)  # Delay after releasing the key
 
 def move(direction, steps=1):
     """
@@ -37,80 +73,59 @@ def move(direction, steps=1):
     """
     for _ in range(steps):
         press_button(direction)
-        time.sleep(0.2)  # Delay between steps for smooth navigation
+        time.sleep(0.3)  # Increased delay between steps for smooth navigation
 
-def find_template(screen, template_path):
+def focus_emulator():
     """
-    Matches a template image within the given screen.
-    :param screen: The screen (NumPy array) to search within.
-    :param template_path: The path to the template image file.
-    :return: The location of the match or None if not found.
+    Focuses the emulator window programmatically.
     """
-    template = cv2.imread(template_path, cv2.IMREAD_UNCHANGED)
-    result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-    if max_val > 0.8:  # Confidence threshold
-        return max_loc
-    return None
+    print("Focusing on the emulator window...")
+    # Replace with the coordinates of the emulator window
+    emulator_x, emulator_y = 100, 100  # Update these values based on your setup
+    keyboard_controller.press(Key.alt)
+    time.sleep(0.1)
+    keyboard_controller.release(Key.alt)
+    time.sleep(0.5)  # Short delay to ensure the window is focused
 
-def navigate_room():
+def navigate_to_stairs():
     """
-    Navigates the player's room from the starting position to the stairs.
-    Detailed Steps:
-    1. Turn downward to face the correct direction.
-    2. Move downward to the bottom of the room.
-    3. Move leftward to align with the stairs.
-    4. Move downward to reach the stairs.
+    Hardcoded navigation to stairs: 7 left, 7 up, 4 right.
     """
-    print("Starting navigation from the player's room.")  # Debugging output
-    logging.info("Starting navigation from the player's room.")
+    print("Navigating to stairs...")
+    logging.info("Navigating to stairs...")
 
-    # Step 1: Turn downward (optional based on starting orientation)
-    print("Turning downward...")
-    press_button("down")
-    time.sleep(0.5)  # Small delay to simulate real-time gameplay
+    # Move 7 steps left
+    move("right", steps=7)
 
-    # Step 2: Move downward to the bottom of the room
-    print("Moving downward...")
-    logging.info("Moving downward to the bottom of the room.")
-    for _ in range(6):  # Adjust the range based on the number of steps needed
-        press_button("down")
-        time.sleep(0.2)
+    # Move 7 steps up
+    move("up", steps=7)
 
-    # Step 3: Move left to align with the stairs
-    print("Moving left...")
-    logging.info("Moving left to align with the stairs.")
-    for _ in range(4):  # Adjust the range based on the number of steps needed
-        press_button("left")
-        time.sleep(0.2)
+    # Move 4 steps right
+    move("left", steps=4)
 
-    # Step 4: Move downward to reach the stairs
-    print("Moving downward to stairs...")
-    logging.info("Moving downward to reach the stairs.")
-    for _ in range(3):  # Adjust the range based on the number of steps needed
-        press_button("down")
-        time.sleep(0.2)
-
-    print("Navigation complete.")
-    logging.info("Navigation complete. Player should now be at the stairs.")
+    print("Reached stairs.")
+    logging.info("Reached stairs.")
 
 def main():
     """
     Main function to initiate the AI navigation process.
     1. Waits for the game to start.
     2. Captures the emulator screen (if needed).
-    3. Calls the room navigation function.
+    3. Calls the navigation function.
     """
     # Define the emulator screen region (update with your emulator's position and size)
-    screen_region = (0, 0, 1000, 1000)  # Update based on your emulator window
+    screen_region = (0, 0, 1220, 850)  # Updated based on your emulator window
+
+    # Focus the emulator window
+    focus_emulator()
 
     # Wait a few seconds to ensure the game starts
     logging.info("Waiting for the game to start...")
     time.sleep(5)
 
-    # Navigate the player's room
-    print("Starting navigation...")
-    navigate_room()
+    # Navigate to the stairs
+    print("Starting navigation to stairs...")
+    navigate_to_stairs()
 
     # Confirm navigation completion by taking a screenshot
     print("Taking a screenshot of the emulator window...")
